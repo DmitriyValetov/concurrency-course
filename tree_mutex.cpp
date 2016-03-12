@@ -93,11 +93,6 @@ private:
         _mutexes[mutexIndex].unlock(isLeftChild);
         if (mutexIndex != 0)
             _unlock(_getParentIndex(mutexIndex), mutexIndex % 2);
-        //_mutexes[mutexIndex].unlock(mutexIndex % 2);
-        //if (mutexIndex < _threadNumber) {
-        //    _unlock(_getLeftChildIndex(mutexIndex));
-        //    _unlock(_getRightChildIndex(mutexIndex));
-        //}
     }
 public: 
     BinaryConcurencyTree()
