@@ -114,10 +114,7 @@ public:
     void lock() {
         auto id = std::this_thread::get_id();
         if (_threadToMutex.count(id) == 0) {
-            // назначаем потоку свой мьютекс
-            // Я положил тебе mutex в mutex, чтобы ты делать lock пока делаешь lock
             _safeAssigningMutex.lock();
-            // Тут всё просто:) Смещение нужно, чтобы найти номер листовых мьютексов
             _threadToMutex[id] = { 
                 (_threadToMutex.size() / 2) + (1 << _threadNumber / 4) - 1,
                 (bool)((_threadToMutex.size() + 1) % 2)
@@ -152,7 +149,6 @@ int main() {
             });
         }
 
-        // подождем завершения всех потоков
         std::for_each(threads.begin(), threads.end(), std::mem_fn(&thread::join));
         cout << endl;
     }
