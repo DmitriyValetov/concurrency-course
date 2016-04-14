@@ -1,70 +1,63 @@
 #include <iostream>
-#include <queue>
-#include <mutex>
-#include <thread>
 #include <condition_variable>
-#include <cstdlib>
-
-using namespace std;
+#include <mutex>
+#include <queue>
+#include <string>
+#include <exception>
 
 template <class Value, class Container = std::deque<Value>>
 class thread_safe_queue {
-	deque<Value> impl;
-	mutable mutex m;
-	condition_variable c_in;
-	condition_variable c_out;
+
+	std::condition_variable c_in;
+	std::condition_variable c_out;
+	std::mutex mutex_;
+	Container queue_;
+	std::size_t capacity_;
+	std::exception ex;
+
 	bool flag_shutdown;
-	size_t count;
-	thread_safe_queue(const thread_safe_queue&) = delete;
-	void operator=(const thread_safe_queue&) = delete;
-
 public:
-	thread_safe_queue(size_t capacity) {
-		impl.resize(capacity);
-		flag_shutdown = false;
-		count = 0;
-	}
+	thread_safe_queue(std::size_t capacity)
+		: capacity_(capacity)
+		, flag_shutdown(false) {};
 
-	void shutdown() {
-		flag_shutdown = true;
-	}
+	thread_safe_queue(const thread_safe_queue& queue) = delete;
 
-	void pop(Value& t){
-		unique_lock<std::mutex> l(m);
-		try {
+	void enqueue(Value item) {
+		if (flag_shutdown)
+			throw ex;
+		std::unique_lock<std::mutex> m(mutex_);
+
+		if (full())
+			c_out.wait(m, [this] { return queue_.size() < capacity_; });
+
+		queue_.push_back(move(item));
+		m.unlock();
+		c_in.notify_one();
+	}
+	void pop(Value& item) {
+		std::unique_lock<std::mutex> f(mutex_);
 			if (flag_shutdown) {
 				c_in.notify_all();
-				if (impl.empty())
-					throw "error";
+				if (queue_.empty())
+					throw ex;
 			}
-			if (impl.empty()) {
-				auto not_empty = [this] { return !impl.empty(); };
-				c_out.wait(l, not_empty);
-			}
-			count--;
-			c_in.notify_one();
-			t = impl.front();
-			impl.pop_back();
-		}
-		catch (string){
-			exit(1);
-		}
-	}
-	void enqueue(const Value& t){
-		unique_lock<mutex> f(m);
-		if (full()) {
-			auto not_overloaded = [this] { return !full(); };
-			c_in.wait(f, not_overloaded);
-		}
-		impl.push_back(t);
-		count++;
-		c_out.notify_one();
-	}
-	bool full() {
-		return (count == impl.size());
-	}
-	bool empty() {
-		return impl.empty();
-	}
+			if (queue_.empty())
+				c_in.wait(f, [this] { return !queue_.empty(); });
 
+			item = move(queue_.front());
+			queue_.pop_front();
+			f.unlock();
+			c_out.notify_one();
+		}
+	bool full()
+	{
+		if (queue_.size() == capacity_)
+			return true;
+		else
+			return false;
+	}
+	void shutdown(){
+		flag_shutdown = true;
+	}
 };
